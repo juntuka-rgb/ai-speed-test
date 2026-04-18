@@ -1,4 +1,3 @@
-# update
 import streamlit as st
 import google.generativeai as genai
 import time
@@ -26,8 +25,12 @@ st.markdown("""
 st.title("⚡ AI Speed Test (Private Alpha)")
 st.caption("最新AIを、オールドMacで快適に動かせるか？の異種格闘技戦")
 
+# ========== 一時記憶（Session State）の初期化 ==========
+# これにより、記録ボタンを押しても結果が消えないようにします
+if "benchmark_result" not in st.session_state:
+    st.session_state.benchmark_result = None
+
 # ========== APIキーの取得（金庫から参照） ==========
-# Secretsに保存したキーをデフォルト値にする
 default_key = st.secrets.get("MY_GEMINI_API_KEY", "")
 
 # ========== サイドバー設定 ==========
@@ -36,7 +39,6 @@ with st.sidebar:
     device_name = st.text_input("Device Name", "M4 Mac mini")
     os_version = st.text_input("OS Version", "macOS 15.1")
     st.divider()
-    # 最初から金庫のキーをセットしておく（type="password"で中身は隠れる）
     api_key = st.text_input("Gemini API Key", value=default_key, type="password")
     
     if api_key == default_key and default_key != "":
@@ -45,13 +47,11 @@ with st.sidebar:
     if HAS_LOGGER:
         st.success("✅ Personal Logging: ON")
 
-# ========== メインベンチマーク ==========
+# ========== メインベンチマーク処理 ==========
 if not api_key:
     st.warning("サイドバーに Gemini API Key を入力してください。")
 else:
-    # 接続設定
     genai.configure(api_key=api_key)
-    # じゅんさんのメモにあった最新の 2.0-flash を指定します
     model = genai.GenerativeModel('gemini-2.0-flash')
 
     prompt = st.text_area("Benchmark Prompt", 
@@ -63,7 +63,6 @@ else:
         
         status_area = st.empty()
         response_area = st.empty()
-        
         status_area.info("📡 Requesting to Gemini 2.0 Flash...")
         
         full_text = ""
@@ -80,30 +79,41 @@ else:
             total_time = (time.perf_counter() - start_time) * 1000
             response_area.markdown(full_text)
             
-            # 結果表示
-            st.divider()
-            st.subheader("📊 Performance Score")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("初速 (TTFT)", f"{ttft_time:.0f} ms")
-            col2.metric("完走 (Total)", f"{total_time:.0f} ms")
-            col3.metric("描画速度", f"{len(full_text)/(total_time/1000):.1f} 文字/秒")
-
-            if HAS_LOGGER:
-                # 💡 ボタンを一度押したら、その中で完結させるようにします
-                if st.button("💾 じゅんさんのスプレッドシートに記録", use_container_width=True):
-                    # 記録中のメッセージを表示
-                    with st.spinner("スプレッドシートに書き込み中..."):
-                        success = data_logger.log_result(device_name, os_version, ttft_time, total_time)
-                        if success:
-                            st.balloons()
-                            st.success(f"【{device_name}】の記録をスプレッドシートに刻みました！")
-                            # 完了後に少し待ってから自動リロード
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error("スプレッドシートへの記録に失敗しました。common.pyや認証情報を確認してください。")
+            # 💡 結果を一時記憶に保存（重要！）
+            st.session_state.benchmark_result = {
+                "ttft": ttft_time,
+                "total": total_time,
+                "char_count": len(full_text)
+            }
+            
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
+
+# ========== 結果表示と記録ボタン ==========
+# 計測結果がメモリにある場合のみ表示
+if st.session_state.benchmark_result:
+    res = st.session_state.benchmark_result
+    st.divider()
+    st.subheader("📊 Performance Score")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("初速 (TTFT)", f"{res['ttft']:.0f} ms")
+    col2.metric("完走 (Total)", f"{res['total']:.0f} ms")
+    col3.metric("描画速度", f"{res['char_count']/(res['total']/1000):.1f} 文字/秒")
+
+    if HAS_LOGGER:
+        if st.button("💾 じゅんさんのスプレッドシートに記録", use_container_width=True):
+            with st.spinner("スプレッドシートに書き込み中..."):
+                # 一時記憶からデータを取り出して保存
+                success = data_logger.log_result(device_name, os_version, res['ttft'], res['total'])
+                if success:
+                    st.balloons()
+                    st.success(f"【{device_name}】の記録をスプレッドシートに刻みました！")
+                    # 保存が終わったらメモリをクリアして2秒後にリセット
+                    st.session_state.benchmark_result = None
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.error("スプレッドシートへの記録に失敗しました。シート名や認証を確認してください。")
 
 # ========== ランキング表示 ==========
 if HAS_LOGGER:
@@ -111,4 +121,5 @@ if HAS_LOGGER:
     st.subheader("🏆 Leaderboard (Latest 10)")
     df = data_logger.get_history()
     if not df.empty:
+        # スプレッドシートの列名に合わせて表示
         st.table(df.tail(10))
