@@ -3,3 +3,4 @@ google-generativeai
 pandas
 gspread
 google-auth
+pytz
