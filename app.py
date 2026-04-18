@@ -89,12 +89,19 @@ else:
             col3.metric("描画速度", f"{len(full_text)/(total_time/1000):.1f} 文字/秒")
 
             if HAS_LOGGER:
-                if st.button("💾 じゅんさんのスプレッドシートに記録"):
-                    if data_logger.log_result(device_name, os_version, ttft_time, total_time):
-                        st.balloons()
-                        st.success("スプレッドシートに記録しました！")
-                        time.sleep(1)
-                        st.rerun()
+                # 💡 ボタンを一度押したら、その中で完結させるようにします
+                if st.button("💾 じゅんさんのスプレッドシートに記録", use_container_width=True):
+                    # 記録中のメッセージを表示
+                    with st.spinner("スプレッドシートに書き込み中..."):
+                        success = data_logger.log_result(device_name, os_version, ttft_time, total_time)
+                        if success:
+                            st.balloons()
+                            st.success(f"【{device_name}】の記録をスプレッドシートに刻みました！")
+                            # 完了後に少し待ってから自動リロード
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("スプレッドシートへの記録に失敗しました。common.pyや認証情報を確認してください。")
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
 
