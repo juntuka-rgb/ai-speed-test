@@ -3,21 +3,18 @@ import google.generativeai as genai
 import time
 import pandas as pd
 
-# 🚩 記録用モジュールがあるかチェック
 try:
     import data_logger
     HAS_LOGGER = True
 except ImportError:
     HAS_LOGGER = False
 
-# ========== ページ設定・デザイン ==========
 st.set_page_config(page_title="AI Speed Test", layout="wide")
 
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #e0e0e0; }
     .stMetric { background-color: #1c1f24; border: 1px solid #00ff00; padding: 15px; border-radius: 10px; }
-    /* 入力欄などの色調整 */
     .stTextInput>div>div>input { color: #00ff00; }
     </style>
     """, unsafe_allow_html=True)
@@ -25,42 +22,34 @@ st.markdown("""
 st.title("⚡ AI Speed Test (Private Alpha)")
 st.caption("最新AIを、オールドMacで快適に動かせるか？の異種格闘技戦")
 
-# ========== 一時記憶（Session State）の初期化 ==========
-# これにより、記録ボタンを押しても結果が消えないようにします
 if "benchmark_result" not in st.session_state:
     st.session_state.benchmark_result = None
 
-# ========== APIキーの取得（金庫から参照） ==========
 default_key = st.secrets.get("MY_GEMINI_API_KEY", "")
 
-# ========== サイドバー設定 ==========
 with st.sidebar:
     st.header("💻 Test Environment")
     device_name = st.text_input("Device Name", "M4 Mac mini")
     os_version = st.text_input("OS Version", "macOS 15.1")
+    ram_size = st.text_input("Memory (RAM)", "16GB")
     st.divider()
     api_key = st.text_input("Gemini API Key", value=default_key, type="password")
     
     if api_key == default_key and default_key != "":
         st.success("🔑 じゅんさんのキーをロードしました")
-    
     if HAS_LOGGER:
         st.success("✅ Personal Logging: ON")
 
-# ========== メインベンチマーク処理 ==========
 if not api_key:
     st.warning("サイドバーに Gemini API Key を入力してください。")
 else:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.0-flash')
-
-    prompt = st.text_area("Benchmark Prompt", 
-        "以下のテーマで、300文字程度の短いブログ記事を生成し、最後に『QOL・Dream・Finance』の3軸で要約してください：\n「オールドMacにChromeOS Flexを入れて最新AI端末として蘇らせる楽しみについて」")
+    prompt = st.text_area("Benchmark Prompt", "以下のテーマで、300文字程度の短いブログ記事を生成し、最後に『QOL・Dream・Finance』の3軸で要約してください：\n「オールドMacにChromeOS Flexを入れて最新AI端末として蘇らせる楽しみについて」")
 
     if st.button("🚀 RUN BENCHMARK", use_container_width=True):
         start_time = time.perf_counter()
         ttft_time = None
-        
         status_area = st.empty()
         response_area = st.empty()
         status_area.info("📡 Requesting to Gemini 2.0 Flash...")
@@ -72,25 +61,20 @@ else:
                 if ttft_time is None:
                     ttft_time = (time.perf_counter() - start_time) * 1000
                     status_area.success(f"✔️ Response Received! (TTFT: {ttft_time:.0f}ms)")
-                
                 full_text += chunk.text
                 response_area.markdown(full_text + "▌")
             
             total_time = (time.perf_counter() - start_time) * 1000
             response_area.markdown(full_text)
             
-            # 💡 結果を一時記憶に保存（重要！）
             st.session_state.benchmark_result = {
                 "ttft": ttft_time,
                 "total": total_time,
                 "char_count": len(full_text)
             }
-            
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
 
-# ========== 結果表示と記録ボタン ==========
-# 計測結果がメモリにある場合のみ表示
 if st.session_state.benchmark_result:
     res = st.session_state.benchmark_result
     st.divider()
@@ -103,23 +87,22 @@ if st.session_state.benchmark_result:
     if HAS_LOGGER:
         if st.button("💾 じゅんさんのスプレッドシートに記録", use_container_width=True):
             with st.spinner("スプレッドシートに書き込み中..."):
-                # 一時記憶からデータを取り出して保存
-                success = data_logger.log_result(device_name, os_version, res['ttft'], res['total'])
+                success = data_logger.log_result(
+                    device_name, os_version, ram_size, 
+                    res['ttft'], res['total'], res['char_count']
+                )
                 if success:
                     st.balloons()
                     st.success(f"【{device_name}】の記録をスプレッドシートに刻みました！")
-                    # 保存が終わったらメモリをクリアして2秒後にリセット
                     st.session_state.benchmark_result = None
                     time.sleep(2)
                     st.rerun()
                 else:
-                    st.error("スプレッドシートへの記録に失敗しました。シート名や認証を確認してください。")
+                    st.error("スプレッドシートへの記録に失敗しました。")
 
-# ========== ランキング表示 ==========
 if HAS_LOGGER:
     st.divider()
     st.subheader("🏆 Leaderboard (Latest 10)")
     df = data_logger.get_history()
     if not df.empty:
-        # スプレッドシートの列名に合わせて表示
         st.table(df.tail(10))
