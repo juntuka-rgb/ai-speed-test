@@ -1,6 +1,5 @@
 import streamlit as st
 import google.generativeai as genai
-from google.generativeai.types import RequestOptions
 import time
 
 # --- ページ設定 ---
@@ -8,11 +7,13 @@ st.set_page_config(page_title="AI Speed Test", layout="centered")
 
 # --- APIキーの自動セットアップ ---
 api_key = None
+# じゅんさんのSecrets「MY_GEMINI_API_KEY」を最優先で確認
 if "MY_GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["MY_GEMINI_API_KEY"]
 elif "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 
+# サイドバーにキーを表示（自動で入るはずです）
 input_key = st.sidebar.text_input("Gemini API Key", value=api_key if api_key else "", type="password")
 final_key = input_key if input_key else api_key
 
@@ -23,6 +24,7 @@ if not final_key:
     st.warning("⚠️ APIキーが読み込めていません。サイドバーに入力してください。")
 else:
     try:
+        # シンプルに初期化
         genai.configure(api_key=final_key)
     except Exception as e:
         st.error(f"API初期化エラー: {e}")
@@ -36,33 +38,30 @@ tab1, tab2 = st.tabs(["📡 脳：APIレスポンス", "🎨 筋肉：描画負�
 
 with tab1:
     st.header("1. API Response Time (脳)")
+    st.info("AIが考え始めてから、最初の1文字が届くまでの時間を測ります。")
     if st.button("脳の反応を測る", key="brain_test"):
         if not final_key:
             st.error("APIキーが必要です")
         else:
             try:
-                # 【対策：APIバージョンを v1 に固定してモデルを指定】
-                # ライブラリの自動補完に頼らず、安定版を指定します
+                # 前回の app.py で成功していた記述に完全に戻しました
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 start_time = time.perf_counter()
                 
-                # RequestOptionsで確実に v1 を使用するように指定
-                response = model.generate_content(
-                    "Hi", 
-                    stream=True,
-                    request_options=RequestOptions(api_version='v1')
-                )
+                # 余計な RequestOptions は一切含めません
+                response = model.generate_content("Hi", stream=True)
                 
                 for chunk in response:
                     ttft = (time.perf_counter() - start_time) * 1000
                     st.metric("初速 (TTFT)", f"{ttft:.0f} ms")
-                    st.success("接続成功！v1(安定版)で疎通を確認しました。")
+                    st.success("接続成功！脳は正常に反応しています。")
                     break
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
 
 with tab2:
     st.header("2. AI Rendering Load (筋肉)")
+    st.success("AIの回答を『どれだけ滑らかに表示できるか』を測定。")
     
     def heavy_render(text):
         container = st.empty()
@@ -72,6 +71,7 @@ with tab2:
         for i, char in enumerate(text):
             chars += 1
             display_text += char
+            # 3文字に1回更新。これでブラウザのフリーズを防ぎつつ負荷をかけます
             if i % 3 == 0 or i == len(text) - 1:
                 container.markdown(f"""
                     <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
@@ -90,11 +90,7 @@ with tab2:
                 with st.spinner("AIが思考中..."):
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     prompt = "3月のブログまとめを、QOL、ドリーム、ファイナンスの3軸で、それぞれ100文字程度で構造化して解説して。"
-                    # ここも v1 固定でリクエスト
-                    response = model.generate_content(
-                        prompt,
-                        request_options=RequestOptions(api_version='v1')
-                    )
+                    response = model.generate_content(prompt)
                     full_text = response.text
                 
                 st.write("🏃‍♂️ レンダリング負荷計測開始...")
@@ -106,12 +102,13 @@ with tab2:
                 col1.metric("完走タイム", f"{duration:.2f} 秒")
                 col2.metric("実戦描画速度", f"{cps:.1f} 文字/秒")
                 
+                # じゅんさんが作成したグラフの数値に基づいた評価
                 if machine_score > 30:
                     st.balloons()
-                    st.write("🚀 **王者クラス**")
+                    st.write("🚀 **王者クラス**: AI体験は完璧にスムーズです。")
                 elif machine_score > 5:
-                    st.write("✅ **実用クラス**")
+                    st.write("✅ **実用クラス**: ストレスなく対話が可能です。")
                 else:
-                    st.write("🐢 **要転生クラス**")
+                    st.write("🐢 **要転生クラス**: ChromeOS Flex等での軽量化が推奨されます。")
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
