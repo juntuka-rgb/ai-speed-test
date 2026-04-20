@@ -2,76 +2,95 @@ import streamlit as st
 import google.generativeai as genai
 import time
 
-# --- じゅんさん専用：ブラウザ負荷を最大化する描画関数 ---
-def heavy_ai_render(full_text):
-    container = st.empty()
-    start_time = time.perf_counter()
-    chars_count = 0
-    
-    # 1文字ずつ追加し、その度に「影付き・枠付き・フォント計算」をブラウザに強いる
-    display_html = ""
-    for char in full_text:
-        chars_count += 1
-        display_html += char
-        # あえて複雑なCSSを毎文字適用してブラウザをいじめる
-        container.markdown(f"""
-            <div style="border: 2px solid #00ff00; padding: 15px; 
-                        background: #000; color: #0f0; 
-                        box-shadow: 0 0 10px #0f0; font-family: monospace;">
-                {display_html}█
-            </div>
-        """, unsafe_allow_html=True)
-        # 描画の「粘り」を見るための極小ウェイト
-        time.sleep(0.002)
-        
-    end_time = time.perf_counter()
-    duration = end_time - start_time
-    cps = chars_count / duration  # Characters Per Second (実戦速度)
-    return duration, cps
+# --- APIキーの自動セットアップ ---
+# Secretsに設定があればそれを使用し、なければサイドバーから入力できるようにします
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
-# --- メインポータル ---
-st.title("⚡ AI Speed Test: 実戦編")
+# APIキーが取得できている場合のみ設定を有効化
+if api_key:
+    genai.configure(api_key=api_key)
+else:
+    st.warning("⚠️ APIキーが設定されていません。サイドバーから入力するか、Secretsにセットしてください。")
 
-# 以前のグラフ結果をユーザーが入力できるようにする
+# --- アプリ本体の構成 ---
+st.title("⚡ AI Speed Test: 実戦ベンチマーク")
+
+# 手持ちのマシンのSpeedometerスコアを比較の基準として入力
 with st.sidebar:
-    st.header("📊 Base Muscle (Speedometer)")
-    base_score = st.number_input("Speedometer Score", value=53.1)
-    api_key = st.text_input("Gemini API Key", type="password")
+    st.header("📊 マシンスペック設定")
+    # グラフで判明した各マシンの数値を初期値として選べるようにしておくと便利です
+    machine_score = st.number_input("Speedometer 3.0 Score", value=53.1)
+    st.caption("M4 Safari: 53.1 / MBA: 4.49 / 2011 Sequoia: 1.25")
 
-tab1, tab2 = st.tabs(["API応答（脳）", "描画負荷（筋肉）"])
+tab1, tab2 = st.tabs(["📡 脳：APIレスポンス", "🎨 筋肉：描画負荷テスト"])
 
 with tab1:
-    st.subheader("📡 1. API Response Test")
-    st.caption("AIが『考え始める』までの時間を測定。マシンスペックに依存しないはずの領域。")
-    if st.button("脳の速さを測る"):
-        # (既存のTTFT計測ロジック)
-        pass
+    st.header("1. API Response Time (脳)")
+    st.info("AIが考え始めてから、最初の1文字が届くまでの時間を測ります。")
+    if st.button("脳の反応を測る", key="brain_test"):
+        if not api_key:
+            st.error("APIキーが必要です")
+        else:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            start_time = time.perf_counter()
+            # 軽い挨拶で通信速度をチェック
+            response = model.generate_content("こんにちは。テストです。", stream=True)
+            for chunk in response:
+                ttft = (time.perf_counter() - start_time) * 1000
+                st.metric("初速 (TTFT)", f"{ttft:.0f} ms")
+                break
 
 with tab2:
-    st.subheader("🎨 2. NotebookLM Rendering Test")
-    st.caption("AIの回答を『どれだけ滑らかに表示できるか』を測定。マシンの筋肉がモロに出る領域。")
+    st.header("2. AI Rendering Load (筋肉)")
+    st.success("AIの回答を『どれだけ滑らかに表示できるか』。マシンの地力を試します。")
     
-    prompt = "3月のブログ記事をQOL・Dream・Financeで詳しく構造化して解説して。"
-    
-    if st.button("筋肉のキレを測る"):
-        if api_key:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            # 1. まずAIからテキストを取得（ストリーミングなしで一度受ける）
-            with st.spinner("AI生成中..."):
+    # 描画負荷をかけるための重いレンダリング関数
+    def heavy_render(text):
+        container = st.empty()
+        start = time.perf_counter()
+        chars = 0
+        display_text = ""
+        for char in text:
+            chars += 1
+            display_text += char
+            # CSS負荷をかけてマシンの描画をいじめる
+            container.markdown(f"""
+                <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
+                {display_text}█
+                </div>
+            """, unsafe_allow_html=True)
+            time.sleep(0.001) # 最小限のウェイト
+        end = time.perf_counter()
+        return end - start, chars
+
+    if st.button("筋肉のキレを測る", key="muscle_test"):
+        if not api_key:
+            st.error("APIキーが必要です")
+        else:
+            with st.spinner("AIが思考中..."):
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                # NotebookLM的な構造化を模した少し長めのプロンプト
+                prompt = "3月のブログまとめを、QOL、ドリーム、ファイナンスの3軸で、それぞれ100文字程度で構造化して解説して。"
                 response = model.generate_content(prompt)
                 full_text = response.text
             
-            # 2. 実戦描画スタート
-            st.write("🏃‍♂️ レンダリング・スタート！")
-            duration, cps = heavy_ai_render(full_text)
+            st.write("🏃‍♂️ レンダリング負荷計測開始...")
+            duration, char_count = heavy_render(full_text)
+            cps = char_count / duration
             
             st.divider()
-            c1, c2 = st.columns(2)
-            c1.metric("描画完走タイム", f"{duration:.2f} 秒")
-            c2.metric("実戦速度 (CPS)", f"{cps:.1f} 文字/秒")
+            col1, col2 = st.columns(2)
+            col1.metric("完走タイム", f"{duration:.2f} 秒")
+            col2.metric("実戦描画速度", f"{cps:.1f} 文字/秒")
             
-            # 3. 診断（Speedometerとの相関）
-            efficiency = (cps / base_score) * 10
-            st.info(f"💡 スコア診断: このマシンのAI描画効率は **{efficiency:.1f}** です。")
+            # 王者M4(53.1)との比較診断
+            if machine_score > 30:
+                st.balloons()
+                st.write("🚀 **王者クラス**: AI体験は完璧にスムーズです。")
+            elif machine_score > 5:
+                st.write("✅ **実用クラス**: ストレスなく対話が可能です。")
+            else:
+                st.write("🐢 **要転生クラス**: ChromeOS Flex等での軽量化が推奨されます。")
