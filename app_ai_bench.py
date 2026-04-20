@@ -2,30 +2,34 @@ import streamlit as st
 import google.generativeai as genai
 import time
 
+# --- ページ設定 ---
+st.set_page_config(page_title="AI Speed Test", layout="centered")
+
 # --- APIキーの自動セットアップ ---
-# じゅんさんのSecretsに合わせて「MY_GEMINI_API_KEY」を探すように修正しました
 api_key = None
 
+# Secretsから優先的に取得（両方の変数名に対応）
 if "MY_GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["MY_GEMINI_API_KEY"]
 elif "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 
-# サイドバーの入力欄（Secretsにない場合の予備）
-input_key = st.sidebar.text_input("Gemini API Key (予備)", value=api_key if api_key else "", type="password")
+# サイドバーでの入力・表示
+input_key = st.sidebar.text_input("Gemini API Key", value=api_key if api_key else "", type="password")
 final_key = input_key if input_key else api_key
-
-# APIキーが取得できている場合のみ設定
-if final_key:
-    try:
-        genai.configure(api_key=final_key)
-    except Exception as e:
-        st.error(f"API設定エラー: {e}")
-else:
-    st.warning("⚠️ APIキーがSecretsから読み込めません。サイドバーに入力するか、Secretsの変数名を確認してください。")
 
 # --- アプリ本体の構成 ---
 st.title("⚡ AI Speed Test: 実戦ベンチマーク")
+
+# 設定が完了しているかチェック
+if not final_key:
+    st.warning("⚠️ APIキーが読み込めていません。Secretsの設定を確認するか、左側のサイドバーに直接入力してください。")
+else:
+    # APIの初期化
+    try:
+        genai.configure(api_key=final_key)
+    except Exception as e:
+        st.error(f"API初期化エラー: {e}")
 
 with st.sidebar:
     st.header("📊 マシンスペック設定")
@@ -42,15 +46,30 @@ with tab1:
             st.error("APIキーが必要です")
         else:
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # モデル名の指定を修正
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
                 start_time = time.perf_counter()
+                
+                # ストリーミングで最初のチャンクを取得
                 response = model.generate_content("こんにちは。テストです。", stream=True)
+                
                 for chunk in response:
                     ttft = (time.perf_counter() - start_time) * 1000
                     st.metric("初速 (TTFT)", f"{ttft:.0f} ms")
+                    st.success(f"最初の応答を受信しました: {chunk.text[:5]}...")
                     break
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
+                st.info("モデル名を 'gemini-1.5-flash' に変更して再試行します...")
+                # 予備の指定方法でトライ
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content("こんにちは", stream=True)
+                    for chunk in response:
+                        st.write("接続成功（別名）")
+                        break
+                except:
+                    pass
 
 with tab2:
     st.header("2. AI Rendering Load (筋肉)")
@@ -64,7 +83,7 @@ with tab2:
         for i, char in enumerate(text):
             chars += 1
             display_text += char
-            # 3文字に1回更新に制限してブラウザのフリーズを防ぐ
+            # 3文字に1回更新
             if i % 3 == 0 or i == len(text) - 1:
                 container.markdown(f"""
                     <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
@@ -81,7 +100,7 @@ with tab2:
         else:
             try:
                 with st.spinner("AIが思考中..."):
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('models/gemini-1.5-flash')
                     prompt = "3月のブログまとめを、QOL、ドリーム、ファイナンスの3軸で、それぞれ100文字程度で構造化して解説して。"
                     response = model.generate_content(prompt)
                     full_text = response.text
@@ -95,6 +114,7 @@ with tab2:
                 col1.metric("完走タイム", f"{duration:.2f} 秒")
                 col2.metric("実戦描画速度", f"{cps:.1f} 文字/秒")
                 
+                # 診断ロジック
                 if machine_score > 30:
                     st.balloons()
                     st.write("🚀 **王者クラス**: AI体験は完璧にスムーズです。")
