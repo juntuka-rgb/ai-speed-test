@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai.types import RequestOptions
 import time
 
 # --- ページ設定 ---
@@ -35,28 +36,33 @@ tab1, tab2 = st.tabs(["📡 脳：APIレスポンス", "🎨 筋肉：描画負�
 
 with tab1:
     st.header("1. API Response Time (脳)")
-    st.info("AIが考え始めてから、最初の1文字が届くまでの時間を測ります。")
     if st.button("脳の反応を測る", key="brain_test"):
         if not final_key:
             st.error("APIキーが必要です")
         else:
             try:
-                # 【修正箇所】models/ を完全に削除し、以前成功した記述に統一
+                # 【対策：APIバージョンを v1 に固定してモデルを指定】
+                # ライブラリの自動補完に頼らず、安定版を指定します
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 start_time = time.perf_counter()
-                response = model.generate_content("Hi", stream=True)
+                
+                # RequestOptionsで確実に v1 を使用するように指定
+                response = model.generate_content(
+                    "Hi", 
+                    stream=True,
+                    request_options=RequestOptions(api_version='v1')
+                )
                 
                 for chunk in response:
                     ttft = (time.perf_counter() - start_time) * 1000
                     st.metric("初速 (TTFT)", f"{ttft:.0f} ms")
-                    st.success("接続成功！")
+                    st.success("接続成功！v1(安定版)で疎通を確認しました。")
                     break
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
 
 with tab2:
     st.header("2. AI Rendering Load (筋肉)")
-    st.success("AIの回答を『どれだけ滑らかに表示できるか』を測定。")
     
     def heavy_render(text):
         container = st.empty()
@@ -82,10 +88,13 @@ with tab2:
         else:
             try:
                 with st.spinner("AIが思考中..."):
-                    # 【修正箇所】ここもプレフィックスなしに統一
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     prompt = "3月のブログまとめを、QOL、ドリーム、ファイナンスの3軸で、それぞれ100文字程度で構造化して解説して。"
-                    response = model.generate_content(prompt)
+                    # ここも v1 固定でリクエスト
+                    response = model.generate_content(
+                        prompt,
+                        request_options=RequestOptions(api_version='v1')
+                    )
                     full_text = response.text
                 
                 st.write("🏃‍♂️ レンダリング負荷計測開始...")
