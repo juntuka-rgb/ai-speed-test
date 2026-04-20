@@ -8,13 +8,13 @@ st.set_page_config(page_title="AI Speed Test", layout="centered")
 # --- APIキーの自動セットアップ ---
 api_key = None
 
-# Secretsの全パターンに対応（じゅんさんのMY_...を優先）
+# Secretsの変数名「MY_GEMINI_API_KEY」を最優先で探します
 if "MY_GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["MY_GEMINI_API_KEY"]
 elif "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 
-# サイドバーでの入力・表示
+# サイドバーでの入力・表示（Secretsにあれば自動で入ります）
 input_key = st.sidebar.text_input("Gemini API Key", value=api_key if api_key else "", type="password")
 final_key = input_key if input_key else api_key
 
@@ -26,6 +26,7 @@ if not final_key:
     st.warning("⚠️ APIキーが読み込めていません。Secretsを確認するか、サイドバーに入力してください。")
 else:
     try:
+        # 最もシンプルな初期化
         genai.configure(api_key=final_key)
     except Exception as e:
         st.error(f"API初期化エラー: {e}")
@@ -45,7 +46,7 @@ with tab1:
             st.error("APIキーが必要です")
         else:
             try:
-                # じゅんさんの成功例に基づき、最もシンプルな指定に変更
+                # プレフィックスなし、過去に成功した通りのモデル名指定
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 start_time = time.perf_counter()
                 
@@ -72,7 +73,7 @@ with tab2:
         for i, char in enumerate(text):
             chars += 1
             display_text += char
-            # 3文字に1回更新（フリーズ防止）
+            # 3文字に1回更新（フリーズ防止と負荷のバランス）
             if i % 3 == 0 or i == len(text) - 1:
                 container.markdown(f"""
                     <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
@@ -89,7 +90,6 @@ with tab2:
         else:
             try:
                 with st.spinner("AIが思考中..."):
-                    # こちらもシンプルな指定に変更
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     prompt = "3月のブログまとめを、QOL、ドリーム、ファイナンスの3軸で、それぞれ100文字程度で構造化して解説して。"
                     response = model.generate_content(prompt)
