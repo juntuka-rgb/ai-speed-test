@@ -3,15 +3,21 @@ import google.generativeai as genai
 import time
 
 # --- APIキーの自動セットアップ ---
+# じゅんさんのSecretsから確実に取得するための修正
+api_key = None
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
-else:
-    api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
+# キーが取得できている場合のみ設定を有効化
 if api_key:
     genai.configure(api_key=api_key)
 else:
-    st.warning("⚠️ APIキーが設定されていません。サイドバーから入力するか、Secretsにセットしてください。")
+    # キーがない場合はサイドバーで入力を促す
+    api_key = st.sidebar.text_input("Gemini API Keyを直接入力してください", type="password")
+    if api_key:
+        genai.configure(api_key=api_key)
+    else:
+        st.warning("⚠️ APIキーがSecretsから読み込めません。サイドバーに入力するか、SecretsのSaveを確認してください。")
 
 # --- アプリ本体の構成 ---
 st.title("⚡ AI Speed Test: 実戦ベンチマーク")
@@ -42,7 +48,6 @@ with tab2:
     st.header("2. AI Rendering Load (筋肉)")
     st.success("AIの回答を『どれだけ滑らかに表示できるか』。マシンの地力を試します。")
     
-    # 描画負荷をかけるための重いレンダリング関数
     def heavy_render(text):
         container = st.empty()
         start = time.perf_counter()
@@ -51,7 +56,6 @@ with tab2:
         for i, char in enumerate(text):
             chars += 1
             display_text += char
-            # 3文字に1回だけ描画を更新するようにして負荷を調整
             if i % 3 == 0 or i == len(text) - 1:
                 container.markdown(f"""
                     <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
