@@ -48,21 +48,24 @@ with tab2:
     st.success("AIの回答を『どれだけ滑らかに表示できるか』。マシンの地力を試します。")
     
     # 描画負荷をかけるための重いレンダリング関数
-    def heavy_render(text):
+   def heavy_render(text):
         container = st.empty()
         start = time.perf_counter()
         chars = 0
         display_text = ""
-        for char in text:
+        # 1文字ずつではなく、描画を少し間引く
+        for i, char in enumerate(text):
             chars += 1
             display_text += char
-            # CSS負荷をかけてマシンの描画をいじめる
-            container.markdown(f"""
-                <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
-                {display_text}█
-                </div>
-            """, unsafe_allow_html=True)
-            time.sleep(0.001) # 最小限のウェイト
+            # 3文字に1回だけ描画を更新するようにして負荷を調整
+            if i % 3 == 0 or i == len(text) - 1:
+                container.markdown(f"""
+                    <div style="border: 2px solid #00ff00; padding: 10px; background: #000; color: #0f0; font-family: monospace;">
+                    {display_text}█
+                    </div>
+                """, unsafe_allow_html=True)
+            # 息継ぎの時間を少し増やす (0.001 -> 0.01)
+            time.sleep(0.01) 
         end = time.perf_counter()
         return end - start, chars
 
